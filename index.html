@@ -1,0 +1,58 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>平資產表</title>
+</head>
+<body style="font-family:Arial;padding:20px;">
+    <h2>📊 平資產表</h2>
+
+    股票代號 (例: 00713.TW):<br>
+    <input id="symbol" value="00713.TW"><br><br>
+
+    股數:<br>
+    <input id="shares" value="22"><br><br>
+
+    成本價格:<br>
+    <input id="cost_price" value="50"><br><br>
+
+    不限用途借貸金額:<br>
+    <input id="loan_amount" value="0"><br><br>
+
+    借貸利率 (%):<br>
+    <input id="loan_rate" value="2"><br><br>
+
+    <button onclick="calculate()">計算</button>
+
+    <h3>結果：</h3>
+    <pre id="result"></pre>
+
+<script>
+function calculate() {
+    fetch('/calculate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            symbol: document.getElementById("symbol").value,
+            shares: document.getElementById("shares").value,
+            cost_price: document.getElementById("cost_price").value,
+            loan_amount: document.getElementById("loan_amount").value,
+            loan_rate: document.getElementById("loan_rate").value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById("result").innerText =
+            "現價: " + data.current_price + "\n" +
+            "總成本: " + data.total_cost + "\n" +
+            "市值: " + data.market_value + "\n" +
+            "未實現損益: " + data.unrealized_profit + "\n" +
+            "累計配息: " + data.total_dividends + "\n" +
+            "每月利息: " + data.monthly_interest + "\n" +
+            "淨值(扣借貸): " + data.net_value;
+    });
+}
+</script>
+</body>
+</html>
