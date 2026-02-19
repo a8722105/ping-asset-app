@@ -1,58 +1,224 @@
-
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="zh-Hant">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>平資產表</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>平資產表（完整版）</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial; padding:16px; max-width:760px; margin:0 auto;}
+    h1{font-size:24px; margin:8px 0 16px;}
+    h2{font-size:18px; margin:18px 0 8px;}
+    .card{border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin:10px 0;}
+    .row{display:flex; gap:8px; flex-wrap:wrap;}
+    input,select,button{font-size:16px; padding:10px; border-radius:10px; border:1px solid #d1d5db;}
+    input,select{flex:1; min-width:120px;}
+    button{background:#111827; color:#fff; border:none; padding:10px 14px;}
+    .btn2{background:#374151;}
+    table{width:100%; border-collapse:collapse; font-size:14px;}
+    th,td{border-bottom:1px solid #eee; padding:8px; text-align:right;}
+    th:first-child, td:first-child{text-align:left;}
+    .muted{color:#6b7280; font-size:13px;}
+    .ok{color:#059669;}
+    .bad{color:#dc2626;}
+  </style>
 </head>
-<body style="font-family:Arial;padding:20px;">
-    <h2>📊 平資產表</h2>
+<body>
+  <h1>📊 平資產表（完整版 MVP）</h1>
+  <div class="muted">多檔投資 + 多筆借貸 + 資產負債總覽（iPhone 直接用）</div>
 
-    股票代號 (例: 00713.TW):<br>
-    <input id="symbol" value="00713.TW"><br><br>
+  <div class="card">
+    <h2>① 投資（可新增多筆）</h2>
+    <div id="holdings"></div>
+    <div class="row">
+      <button onclick="addHolding()">＋新增一筆投資</button>
+      <button class="btn2" onclick="saveLocal()">儲存（本機）</button>
+      <button class="btn2" onclick="loadLocal()">讀取（本機）</button>
+    </div>
+    <div class="muted">提示：台股 ETF 代號請用 <b>00713.TW</b>、<b>00937B.TW</b> 這種格式。</div>
+  </div>
 
-    股數:<br>
-    <input id="shares" value="22"><br><br>
+  <div class="card">
+    <h2>② 不限用途借貸（可新增多筆）</h2>
+    <div id="loans"></div>
+    <button onclick="addLoan()">＋新增一筆借貸</button>
+    <div class="muted">利率請填年利率（%）。例如 2.3 代表 2.3%</div>
+  </div>
 
-    成本價格:<br>
-    <input id="cost_price" value="50"><br><br>
+  <div class="card">
+    <h2>③ 產生資產負債表</h2>
+    <button onclick="calc()">計算 / 更新</button>
+    <div id="summary" style="margin-top:12px;"></div>
+  </div>
 
-    不限用途借貸金額:<br>
-    <input id="loan_amount" value="0"><br><br>
+  <div class="card">
+    <h2>投資明細</h2>
+    <div id="investTable"></div>
+  </div>
 
-    借貸利率 (%):<br>
-    <input id="loan_rate" value="2"><br><br>
-
-    <button onclick="calculate()">計算</button>
-
-    <h3>結果：</h3>
-    <pre id="result"></pre>
+  <div class="card">
+    <h2>借貸明細</h2>
+    <div id="loanTable"></div>
+  </div>
 
 <script>
-function calculate() {
-    fetch('/calculate', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            symbol: document.getElementById("symbol").value,
-            shares: document.getElementById("shares").value,
-            cost_price: document.getElementById("cost_price").value,
-            loan_amount: document.getElementById("loan_amount").value,
-            loan_rate: document.getElementById("loan_rate").value
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById("result").innerText =
-            "現價: " + data.current_price + "\n" +
-            "總成本: " + data.total_cost + "\n" +
-            "市值: " + data.market_value + "\n" +
-            "未實現損益: " + data.unrealized_profit + "\n" +
-            "累計配息: " + data.total_dividends + "\n" +
-            "每月利息: " + data.monthly_interest + "\n" +
-            "淨值(扣借貸): " + data.net_value;
+  function holdingRow(data={}){
+    const id = crypto.randomUUID();
+    const symbol = data.symbol || "00713.TW";
+    const name = data.name || "";
+    const unit = data.unit || "lots";
+    const qty = (data.qty ?? 22);
+    const cost = (data.cost ?? 50);
+
+    return `
+      <div class="card" data-type="holding" data-id="${id}">
+        <div class="row">
+          <input placeholder="代號 例 00713.TW" value="${symbol}" data-k="symbol"/>
+          <input placeholder="名稱（可留空）" value="${name}" data-k="name"/>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <select data-k="unit">
+            <option value="lots" ${unit==="lots"?"selected":""}>張</option>
+            <option value="shares" ${unit==="shares"?"selected":""}>股</option>
+          </select>
+          <input type="number" inputmode="decimal" placeholder="數量" value="${qty}" data-k="qty"/>
+          <input type="number" inputmode="decimal" placeholder="成本(每股)" value="${cost}" data-k="cost"/>
+          <button class="btn2" onclick="removeRow(this)">刪除</button>
+        </div>
+        <div class="muted">若選「張」，系統會自動 ×1000 轉股數。</div>
+      </div>
+    `;
+  }
+
+  function loanRow(data={}){
+    const id = crypto.randomUUID();
+    const name = data.name || "台股借貸";
+    const principal = (data.principal ?? 0);
+    const rate = (data.rate ?? 2.0);
+
+    return `
+      <div class="card" data-type="loan" data-id="${id}">
+        <div class="row">
+          <input placeholder="借貸名稱" value="${name}" data-k="name"/>
+          <input type="number" inputmode="decimal" placeholder="本金" value="${principal}" data-k="principal"/>
+          <input type="number" inputmode="decimal" placeholder="年利率(%)" value="${rate}" data-k="rate"/>
+          <button class="btn2" onclick="removeRow(this)">刪除</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function addHolding(){ document.getElementById("holdings").insertAdjacentHTML("beforeend", holdingRow()); }
+  function addLoan(){ document.getElementById("loans").insertAdjacentHTML("beforeend", loanRow()); }
+  function removeRow(btn){ btn.closest(".card").remove(); }
+
+  function collect(type){
+    const cards = [...document.querySelectorAll(`[data-type="${type}"]`)];
+    return cards.map(card=>{
+      const obj = {};
+      card.querySelectorAll("[data-k]").forEach(el=>{
+        obj[el.getAttribute("data-k")] = el.value;
+      });
+      if(type==="holding"){
+        obj.qty = Number(obj.qty || 0);
+        obj.cost = Number(obj.cost || 0);
+      } else {
+        obj.principal = Number(obj.principal || 0);
+        obj.rate = Number(obj.rate || 0);
+      }
+      return obj;
     });
-}
+  }
+
+  async function calc(){
+    const holdings = collect("holding");
+    const loans = collect("loan");
+
+    const res = await fetch("/api/portfolio", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({holdings, loans})
+    });
+
+    const data = await res.json();
+
+    if(!res.ok){
+      document.getElementById("summary").innerHTML =
+        `<div class="bad"><b>發生錯誤：</b>${(data && (data.error||data.message)) || "請稍後再試"}</div>`;
+      return;
+    }
+
+    const t = data.totals;
+    document.getElementById("summary").innerHTML = `
+      <div><b>投資成本總額：</b>${t.invest_cost_total.toLocaleString()}</div>
+      <div><b>投資市值總額：</b>${t.invest_market_value_total.toLocaleString()}</div>
+      <div><b>借貸本金總額：</b>${t.loan_principal_total.toLocaleString()}</div>
+      <div><b>借貸每月利息：</b>${t.loan_monthly_interest_total.toLocaleString()}</div>
+      <div style="margin-top:8px;font-size:18px;">
+        <b>淨值（投資市值 - 借貸本金）：</b>
+        <span class="${t.net_worth>=0?'ok':'bad'}">${t.net_worth.toLocaleString()}</span>
+      </div>
+    `;
+
+    const inv = data.invest || [];
+    document.getElementById("investTable").innerHTML = tableHTML(
+      ["代號","名稱","股數","成本","現價","成本總額","市值","未實現","報酬%"],
+      inv.map(r=>[
+        r.symbol, r.name || "",
+        num(r.shares), num(r.cost), num(r.price),
+        num(r.cost_total), num(r.market_value), num(r.unrealized_pl),
+        num(r.return_pct)
+      ])
+    );
+
+    const ln = data.loans || [];
+    document.getElementById("loanTable").innerHTML = tableHTML(
+      ["名稱","本金","年利率%","月利息","年利息"],
+      ln.map(r=>[
+        r.name, num(r.principal), num(r.rate),
+        num(r.monthly_interest), num(r.annual_interest)
+      ])
+    );
+  }
+
+  function num(x){
+    if (x===null || x===undefined) return "";
+    if (typeof x === "number") return x.toLocaleString();
+    const n = Number(x);
+    return isNaN(n) ? String(x) : n.toLocaleString();
+  }
+
+  function tableHTML(headers, rows){
+    let h = "<table><thead><tr>";
+    headers.forEach(c=> h += `<th>${c}</th>`);
+    h += "</tr></thead><tbody>";
+    rows.forEach(r=>{
+      h += "<tr>";
+      r.forEach(c=> h += `<td>${c}</td>`);
+      h += "</tr>";
+    });
+    h += "</tbody></table>";
+    return h;
+  }
+
+  function saveLocal(){
+    const data = { holdings: collect("holding"), loans: collect("loan") };
+    localStorage.setItem("ping_asset_state", JSON.stringify(data));
+    alert("已儲存到本機（此手機瀏覽器）");
+  }
+  function loadLocal(){
+    const raw = localStorage.getItem("ping_asset_state");
+    if(!raw){ alert("本機沒有資料"); return; }
+    const data = JSON.parse(raw);
+    document.getElementById("holdings").innerHTML = "";
+    document.getElementById("loans").innerHTML = "";
+    (data.holdings||[]).forEach(h=> document.getElementById("holdings").insertAdjacentHTML("beforeend", holdingRow(h)));
+    (data.loans||[]).forEach(l=> document.getElementById("loans").insertAdjacentHTML("beforeend", loanRow(l)));
+    alert("已讀取本機資料");
+  }
+
+  // init
+  addHolding();
+  addLoan();
 </script>
 </body>
 </html>
